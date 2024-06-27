@@ -12,6 +12,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from dotenv import load_dotenv
 import logging
+from fastapi import FastAPI
+import uvicorn
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -21,6 +23,25 @@ load_dotenv()
 sent_message = False
 
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+
+app = FastAPI()
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+bot = discord.Client(intents=intents)
+
+TOKEN = os.getenv("TOKEN")
+
+
+@app.on_event("startup")
+async def startup_event():
+    logging.info("Starting up bot")
+    asyncio.create_task(bot.start(TOKEN))
+    await asyncio.sleep(5)
+    print(f"{bot.user} has connected to Discord!")
+    bot.loop.create_task(scheduled_upcoming_events())
+
 
 def google_calendar_events():
     """
@@ -60,10 +81,6 @@ def google_calendar_events():
         logging.error(f"An error occurred: {error}")
         return []
 
-intents = discord.Intents.default()
-intents.message_content = True
-
-client = discord.Client(intents=intents)
 
 async def upcoming_events():
     global sent_message
@@ -85,7 +102,7 @@ async def upcoming_events():
                 summary = event["summary"]
                 event_message += f"<t:{unix_timestamp}:R> - {summary}\n"
         if event_message and not sent_message:
-            channel = client.get_channel(1253856173929529426)
+            channel = bot.get_channel(1253856173929529426)
             await channel.send(f"Upcoming events @everyone:\n{event_message}")
             sent_message = True
             logging.info(event_message)
@@ -94,31 +111,45 @@ async def upcoming_events():
     except Exception as e:
         logging.error(f"An error occurred: {e}")
 
+
 def sent_message_resetter():
     global sent_message
     sent_message = False
     logging.info("Sent message reset")
+
 
 async def scheduled_upcoming_events():
     while True:
         await upcoming_events()
         await asyncio.sleep(1800)
 
+
 def scheduled_sent_message_resetter():
     while True:
         sent_message_resetter()
         time.sleep(25200)
 
-@client.event
-async def on_ready():
-    logging.info(f'We have logged in as {client.user}')
-    client.loop.create_task(scheduled_upcoming_events())
+
+@app.get("/")
+async def root():
+    return {"message": "Hello World"}
+
+
+@app.get("/events/get")
+async def google_events_get():
+    event_list = google_calendar_events()
+    return event_list
+
+@app.get("/bot/sendmessage/{message}")
+async def send_message(message: str):
+    channel = bot.get_channel(1253856173929529426)
+    await channel.send(message)
+    return {"message": "Message sent!"}
+
+
 
 thread = threading.Thread(target=scheduled_sent_message_resetter)
 thread.start()
 
-TOKEN = os.getenv('TOKEN')
-if TOKEN:
-    client.run(TOKEN)
-else:
-    logging.error("No token found. Please set your bot token in the .env file.")
+if __name__ == '__main__':
+    uvicorn.run(app, host="localhost", port=5000)

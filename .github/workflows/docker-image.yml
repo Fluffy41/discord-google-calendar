@@ -10,7 +10,7 @@ env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: docker.io
   # github.repository as <account>/<repo>
-  DOCKER_HUB_USERNAME: fluffy41 # Replace with your Docker Hub username
+  DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_USERNAME }} # Replace with your Docker Hub username
   REPOSITORY_NAME: discord-google-calendar
 
 jobs:
